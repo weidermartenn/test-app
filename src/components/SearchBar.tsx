@@ -25,6 +25,9 @@ export function SearchBar({ value, onChangeText, placeholder = 'Поиск по 
   );
 }
 
+// @ts-ignore
+// из-за outlineStyle
+
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
