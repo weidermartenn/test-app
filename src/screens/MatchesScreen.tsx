@@ -11,6 +11,7 @@ import {
 import { MATCHES_URL } from '../config';
 import { FavoriteButton } from '../components/FavoriteButton';
 import { UpdatedAgo } from '../components/UpdatedAgo';
+import { SearchBar } from '../components/SearchBar';
 import { useFavorites } from '../hooks/useFavorites';
 
 type Team = {
@@ -50,6 +51,7 @@ export function MatchesScreen() {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterType>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
   const { isFavorite, toggle } = useFavorites();
@@ -64,7 +66,6 @@ export function MatchesScreen() {
       }
       const data = await response.json();
       
-      // Сервер возвращает объект { round, matches }
       setMatches(Array.isArray(data.matches) ? data.matches : []);
       if (data.round) setRound(data.round);
       
@@ -86,17 +87,26 @@ export function MatchesScreen() {
     fetchMatches(true);
   }, []);
 
+  // Комбинированная фильтрация: вкладка + поиск по названию ФК
   const filteredMatches = matches.filter((match) => {
+    // Проверка фильтра по вкладке
+    let matchesTab = true;
     if (filter === 'upcoming') {
-      return match.status === 'scheduled';
+      matchesTab = match.status === 'scheduled';
+    } else if (filter === 'finished') {
+      matchesTab = match.status === 'finished';
+    } else if (filter === 'favorites') {
+      matchesTab = isFavorite(match.id);
     }
-    if (filter === 'finished') {
-      return match.status === 'finished';
-    }
-    if (filter === 'favorites') {
-      return isFavorite(match.id);
-    }
-    return true; // 'all' включает все статусы (live, postponed и т.д.)
+
+    // Проверка поискового запроса (по имени хозяев или гостей, без учёта регистра)
+    const query = searchQuery.trim().toLowerCase();
+    const matchesSearch =
+      !query ||
+      match.home.name.toLowerCase().includes(query) ||
+      match.away.name.toLowerCase().includes(query);
+
+    return matchesTab && matchesSearch;
   });
 
   const formatDate = (isoString: string | null) => {
@@ -141,7 +151,14 @@ export function MatchesScreen() {
         <UpdatedAgo since={lastUpdated} />
       </View>
 
-      {/* Фильтры */}
+      {/* Поиск по названию клуба */}
+      <SearchBar
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        placeholder="Поиск по клубу (например, Спартак)..."
+      />
+
+      {/* Фильтры по вкладкам */}
       <View style={styles.filterContainer}>
         <TouchableOpacity
           style={[styles.filterButton, filter === 'all' && styles.filterButtonActive]}
@@ -183,7 +200,7 @@ export function MatchesScreen() {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
-              {filter === 'favorites' ? 'Нет избранных матчей' : 'Матчи не найдены'}
+              {searchQuery ? 'По вашему запросу матчи не найдены' : 'Матчи не найдены'}
             </Text>
           </View>
         }
@@ -249,7 +266,7 @@ const styles = StyleSheet.create({
   retryButton: {
     backgroundColor: '#ef3124',
     paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingUpdated: 10,
     borderRadius: 8,
   },
   retryButtonText: {
@@ -288,7 +305,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   filterText: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#4b5563',
     fontWeight: '500',
   },
@@ -300,6 +317,7 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   card: {
+    background: '#ffffff',
     backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 16,
