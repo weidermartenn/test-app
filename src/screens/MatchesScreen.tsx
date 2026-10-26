@@ -13,14 +13,25 @@ import { FavoriteButton } from '../components/FavoriteButton';
 import { UpdatedAgo } from '../components/UpdatedAgo';
 import { useFavorites } from '../hooks/useFavorites';
 
+type Team = {
+  id: string;
+  name: string;
+  city: string;
+};
+
+type Score = {
+  home: number;
+  away: number;
+};
+
 type Match = {
   id: string;
-  homeTeam: string;
-  awayTeam: string;
-  homeScore?: number | null;
-  awayScore?: number | null;
-  datetime: string; // ISO string или таймстамп
+  startsAt: string | null;
   status: 'scheduled' | 'live' | 'finished' | 'postponed' | string;
+  minute?: number;
+  home: Team;
+  away: Team;
+  score: Score | null;
 };
 
 type FilterType = 'all' | 'upcoming' | 'finished';
@@ -30,11 +41,11 @@ const STATUS_MAP: Record<string, string> = {
   live: 'Идет',
   finished: 'Завершён',
   postponed: 'Перенесён',
-  cancelled: 'Отменён',
 };
 
 export function MatchesScreen() {
   const [matches, setMatches] = useState<Match[]>([]);
+  const [round, setRound] = useState<number | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +63,11 @@ export function MatchesScreen() {
         throw new Error(`Ошибка сервера: ${response.status}`);
       }
       const data = await response.json();
-      setMatches(data);
+      
+      // Сервер возвращает объект { round, matches }
+      setMatches(Array.isArray(data.matches) ? data.matches : []);
+      if (data.round) setRound(data.round);
+      
       setLastUpdated(new Date());
     } catch (err: any) {
       setError(err?.message || 'Не удалось загрузить матчи');
@@ -78,10 +93,11 @@ export function MatchesScreen() {
     if (filter === 'finished') {
       return match.status === 'finished';
     }
-    return true; // 'all' включает все статусы (включая live, postponed и т.д.)
+    return true; // 'all' включает все статусы (live, postponed и т.д.)
   });
 
-  const formatDate = (isoString: string) => {
+  const formatDate = (isoString: string | null) => {
+    if (!isoString) return 'Время уточняется';
     try {
       const date = new Date(isoString);
       return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], {
@@ -116,7 +132,9 @@ export function MatchesScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Матчи тура</Text>
+        <Text style={styles.title}>
+          Матчи тура {round ? `${round}` : ''}
+        </Text>
         <UpdatedAgo since={lastUpdated} />
       </View>
 
@@ -157,12 +175,13 @@ export function MatchesScreen() {
           </View>
         }
         renderItem={({ item }) => {
-          const hasScore =
-            item.homeScore !== undefined &&
-            item.homeScore !== null &&
-            item.awayScore !== undefined &&
-            item.awayScore !== null;
-          const statusText = STATUS_MAP[item.status] || item.status;
+          const hasScore = item.score !== null && item.score !== undefined;
+          let statusText = STATUS_MAP[item.status] || item.status;
+          
+          if (item.status === 'live' && item.minute) {
+            statusText = `Идет (${item.minute}')`;
+          }
+
           const favorite = isFavorite(item.id);
 
           return (
@@ -173,16 +192,16 @@ export function MatchesScreen() {
               </View>
               <View style={styles.teamsRow}>
                 <Text style={styles.teamName} numberOfLines={1}>
-                  {item.homeTeam}
+                  {item.home.name}
                 </Text>
                 <Text style={styles.score}>
-                  {hasScore ? `${item.homeScore} : ${item.awayScore}` : 'vs'}
+                  {hasScore ? `${item.score?.home} : ${item.score?.away}` : 'vs'}
                 </Text>
-                <Text style={styles.teamName} numberOfLines={1} style={{ textAlign: 'right' }}>
-                  {item.awayTeam}
+                <Text style={[styles.teamName, styles.awayTeamName]} numberOfLines={1}>
+                  {item.away.name}
                 </Text>
               </View>
-              <Text style={styles.dateText}>{formatDate(item.datetime)}</Text>
+              <Text style={styles.dateText}>{formatDate(item.startsAt)}</Text>
             </View>
           );
         }}
@@ -279,7 +298,6 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   cardHeader: {
-    flexDirection: '1',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -302,6 +320,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#1f2937',
+  },
+  awayTeamName: {
+    textAlign: 'right',
   },
   score: {
     fontSize: 18,
