@@ -34,7 +34,7 @@ type Match = {
   score: Score | null;
 };
 
-type FilterType = 'all' | 'upcoming' | 'finished';
+type FilterType = 'all' | 'upcoming' | 'finished' | 'favorites';
 
 const STATUS_MAP: Record<string, string> = {
   scheduled: 'Предстоящий',
@@ -92,6 +92,9 @@ export function MatchesScreen() {
     }
     if (filter === 'finished') {
       return match.status === 'finished';
+    }
+    if (filter === 'favorites') {
+      return isFavorite(match.id);
     }
     return true; // 'all' включает все статусы (live, postponed и т.д.)
   });
@@ -162,6 +165,14 @@ export function MatchesScreen() {
             Завершённые
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterButton, filter === 'favorites' && styles.filterButtonActive]}
+          onPress={() => setFilter('favorites')}
+        >
+          <Text style={[styles.filterText, filter === 'favorites' && styles.filterTextActive]}>
+            Избранное
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <FlatList
@@ -171,7 +182,9 @@ export function MatchesScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#ef3124']} />}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Матчи не найдены</Text>
+            <Text style={styles.emptyText}>
+              {filter === 'favorites' ? 'Нет избранных матчей' : 'Матчи не найдены'}
+            </Text>
           </View>
         }
         renderItem={({ item }) => {
@@ -275,7 +288,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   filterText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#4b5563',
     fontWeight: '500',
   },
